@@ -1,0 +1,41 @@
+name: Build NoTrO chess APK
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unzip the project
+        run: |
+          Z=$(ls *.zip | head -1)
+          unzip -o "$Z" -x ".github/*" "*/.github/*"
+          D=$(dirname "$(find . -name capacitor.config.json -not -path './.git/*' -not -path '*/node_modules/*' | head -1)")
+          echo "PROJECT_DIR=$D" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - name: Install and prepare web files
+        run: |
+          cd "$PROJECT_DIR"
+          npm install
+          mkdir -p www/lib
+          cp node_modules/three/build/three.min.js www/lib/three.min.js
+      - name: Add Android and patch (portrait, fullscreen)
+        run: |
+          cd "$PROJECT_DIR"
+          npx cap add android
+          python3 scripts/patch_android.py
+          npx cap sync android
+      - name: Build debug APK
+        run: |
+          cd "$PROJECT_DIR/android"
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NoTrO-chess-apk
+          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
